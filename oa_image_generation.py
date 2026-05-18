@@ -52,14 +52,14 @@ async def run_generation(
     provider = str(_get_nested(config, "api.provider", "openai")).lower()
     is_json_provider = provider == "json_api"
     max_age = int(_get_nested(config, "behavior.reference_image_max_age_seconds", 900))
-    if use_recent_image and not reference_image_base64:
-        reference_image_base64 = get_latest_cached_image(stream_id, max_age)
-    reference_image_mime = _data_url_mime(reference_image_base64 or "") or "image/png"
-    reference_image_filename = "reference.png"
     if not image_source:
         image_source = _extract_first_url(raw_prompt)
     if not image_source and not is_json_provider:
         image_source = _extract_local_image_source(raw_prompt)
+    if use_recent_image and not reference_image_base64 and not image_source:
+        reference_image_base64 = get_latest_cached_image(stream_id, max_age)
+    reference_image_mime = _data_url_mime(reference_image_base64 or "") or "image/png"
+    reference_image_filename = "reference.png"
     if not image_source and reference_image_base64 and _looks_like_url(reference_image_base64):
         image_source = reference_image_base64
     resolved_mode = mode
@@ -85,12 +85,20 @@ async def run_generation(
     if resolved_mode == "image_to_image" and not is_json_provider and not reference_image_base64 and image_source:
         if _looks_like_url(image_source):
             timeout = int(_get_nested(config, "api.timeout_seconds", 120))
+            max_bytes = int(
+                _get_nested(
+                    config,
+                    "behavior.url_image_max_bytes",
+                    _get_nested(config, "behavior.local_image_max_bytes", 10 * 1024 * 1024),
+                )
+            )
+            allow_non_image = bool(_get_nested(config, "behavior.allow_non_image_url_content_type", False))
             async with aiohttp.ClientSession() as session:
                 (
                     reference_image_base64,
                     reference_image_mime,
                     reference_image_filename,
-                ) = await _download_reference_image(session, image_source, timeout)
+                ) = await _download_reference_image(session, image_source, timeout, max_bytes, allow_non_image)
         elif _looks_like_local_image_source(image_source, config):
             if not _get_nested(config, "behavior.allow_local_image_source", False):
                 return False, "local image_source is disabled"

@@ -9,6 +9,7 @@ import aiohttp
 from oa_image_config import _get_nested
 
 LOCAL_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+DEFAULT_URL_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 
 try:
     from maim_message import Seg
@@ -81,10 +82,53 @@ def extract_images(segment_or_segments) -> List[str]:
     return images
 
 
-async def _download_as_base64(session: aiohttp.ClientSession, url: str, timeout: int) -> str:
+def _safe_max_bytes(max_bytes: int) -> int:
+    return max(1, int(max_bytes or DEFAULT_URL_IMAGE_MAX_BYTES))
+
+
+def _response_content_length(response: aiohttp.ClientResponse) -> int:
+    raw_length = response.headers.get("content-length")
+    if not raw_length:
+        return 0
+    try:
+        return int(raw_length)
+    except ValueError:
+        return 0
+
+
+async def _read_limited_image_response(
+    response: aiohttp.ClientResponse,
+    max_bytes: int,
+    allow_non_image_content_type: bool,
+) -> Tuple[str, str]:
+    response.raise_for_status()
+    content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if not content_type.startswith("image/") and not allow_non_image_content_type:
+        raise ValueError(f"URL did not return an image content-type: {content_type or 'missing'}")
+    max_bytes = _safe_max_bytes(max_bytes)
+    content_length = _response_content_length(response)
+    if content_length > max_bytes:
+        raise ValueError(f"URL image is too large: {content_length} bytes > {max_bytes} bytes")
+    chunks: List[bytes] = []
+    total = 0
+    async for chunk in response.content.iter_chunked(64 * 1024):
+        total += len(chunk)
+        if total > max_bytes:
+            raise ValueError(f"URL image is too large: {total} bytes > {max_bytes} bytes")
+        chunks.append(chunk)
+    return base64.b64encode(b"".join(chunks)).decode("ascii"), content_type
+
+
+async def _download_as_base64(
+    session: aiohttp.ClientSession,
+    url: str,
+    timeout: int,
+    max_bytes: int = DEFAULT_URL_IMAGE_MAX_BYTES,
+    allow_non_image_content_type: bool = False,
+) -> str:
     async with session.get(url, timeout=timeout) as response:
-        response.raise_for_status()
-        return base64.b64encode(await response.read()).decode("ascii")
+        image_base64, _ = await _read_limited_image_response(response, max_bytes, allow_non_image_content_type)
+        return image_base64
 
 
 def _guess_image_mime(name: str, default: str = "image/png") -> str:
@@ -101,14 +145,23 @@ def _safe_image_filename(name: str, default: str = "reference.png") -> str:
     return default
 
 
-async def _download_reference_image(session: aiohttp.ClientSession, url: str, timeout: int) -> Tuple[str, str, str]:
+async def _download_reference_image(
+    session: aiohttp.ClientSession,
+    url: str,
+    timeout: int,
+    max_bytes: int = DEFAULT_URL_IMAGE_MAX_BYTES,
+    allow_non_image_content_type: bool = False,
+) -> Tuple[str, str, str]:
     async with session.get(url, timeout=timeout) as response:
-        response.raise_for_status()
-        content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        image_base64, content_type = await _read_limited_image_response(
+            response,
+            max_bytes,
+            allow_non_image_content_type,
+        )
         parsed = urlparse(url)
         filename = _safe_image_filename(unquote(Path(parsed.path).name), "reference.png")
         mime_type = content_type if content_type.startswith("image/") else _guess_image_mime(filename)
-        return base64.b64encode(await response.read()).decode("ascii"), mime_type, filename
+        return image_base64, mime_type, filename
 
 
 def _looks_like_url(value: str) -> bool:

@@ -37,6 +37,7 @@ from oa_image_runtime import (
     build_context_prompt,
     cache_images,
     cancel_command_tasks,
+    cleanup_runtime_state_from_config,
     has_recent_command_job,
     mark_command_job,
     track_command_task,
@@ -125,6 +126,10 @@ class BehaviorConfig(PluginConfigBase):
     allow_local_image_source: bool = Field(default=False, description="是否允许读取插件目录内的本地参考图")
     local_image_base_dir: str = Field(default="local_images", description="允许读取的本地参考图目录")
     local_image_max_bytes: int = Field(default=10 * 1024 * 1024, description="本地参考图最大字节数")
+    url_image_max_bytes: int = Field(default=10 * 1024 * 1024, description="URL 参考图最大字节数")
+    allow_non_image_url_content_type: bool = Field(default=False, description="是否允许 URL 响应缺少 image/* 类型")
+    runtime_state_ttl_seconds: int = Field(default=24 * 3600, description="运行时缓存按 stream 清理的 TTL")
+    max_runtime_streams: int = Field(default=1024, description="最多保留多少个 stream 的运行时状态")
     storage_message: bool = Field(default=True, description="是否把发送的图片写入消息库")
     send_error_messages: bool = Field(default=False, description="失败时是否向聊天发送错误文本")
 
@@ -268,6 +273,7 @@ class OAImagePlugin(MaiBotPlugin):
     def _effective_config(self) -> dict[str, Any]:
         config = self.get_plugin_config_data() or type(self).build_default_config()
         config.setdefault("runtime", {})["plugin_dir"] = str(_PLUGIN_DIR)
+        cleanup_runtime_state_from_config(config)
         return config
 
     def _tool_description(self, config: dict[str, Any]) -> str:
@@ -455,7 +461,7 @@ class OAImagePlugin(MaiBotPlugin):
                 stream_id=stream_id,
                 raw_prompt=prompt,
                 mode=mode,
-                use_recent_image=mode == "image_to_image",
+                use_recent_image=mode == "image_to_image" and not image_source,
                 image_source=image_source,
                 profile_name=profile_name,
             )
