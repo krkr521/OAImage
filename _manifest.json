@@ -1,0 +1,46 @@
+{
+  "manifest_version": 2,
+  "version": "1.0.0",
+  "name": "OAImage",
+  "description": "通过可配置生图套餐调用 OpenAI 兼容图片端点，提供文字生图、图生图和 LLM 可调用的生图工具。",
+  "author": {
+    "name": "A-Dawn",
+    "url": "https://github.com/A-Dawn"
+  },
+  "license": "Apache-2.0",
+  "urls": {
+    "repository": "https://github.com/A-Dawn/OAImage",
+    "homepage": "https://github.com/A-Dawn/OAImage",
+    "documentation": "https://github.com/A-Dawn/OAImage/blob/1.0.x/README.md",
+    "issues": "https://github.com/A-Dawn/OAImage/issues"
+  },
+  "host_application": {
+    "min_version": "1.0.0",
+    "max_version": "1.0.99"
+  },
+  "sdk": {
+    "min_version": "2.4.0",
+    "max_version": "2.99.99"
+  },
+  "dependencies": [
+    {
+      "type": "python_package",
+      "name": "aiohttp",
+      "version_spec": ">=3.8.0"
+    }
+  ],
+  "capabilities": [
+    "send.image",
+    "send.text",
+    "message.get_recent",
+    "message.build_readable"
+  ],
+  "i18n": {
+    "default_locale": "zh-CN",
+    "locales_path": "_locales",
+    "supported_locales": [
+      "zh-CN"
+    ]
+  },
+  "id": "a-dawn.oaimage"
+}
