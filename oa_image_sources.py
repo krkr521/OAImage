@@ -2,14 +2,18 @@ import base64
 import mimetypes
 import re
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 from urllib.parse import unquote, urlparse
 
 import aiohttp
-from maim_message import Seg
 from oa_image_config import _get_nested
 
 LOCAL_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+try:
+    from maim_message import Seg
+except Exception:
+    Seg = None  # type: ignore[assignment]
 
 
 def _clean_base64(value: str) -> str:
@@ -28,7 +32,7 @@ def _data_url_mime(value: str) -> str:
 def _iter_segments(segment_or_segments):
     if not segment_or_segments:
         return
-    if isinstance(segment_or_segments, Seg):
+    if Seg is not None and isinstance(segment_or_segments, Seg):
         if segment_or_segments.type == "seglist":
             for child in segment_or_segments.data or []:
                 yield from _iter_segments(child)
@@ -38,13 +42,40 @@ def _iter_segments(segment_or_segments):
     if isinstance(segment_or_segments, list):
         for item in segment_or_segments:
             yield from _iter_segments(item)
+        return
+    if isinstance(segment_or_segments, dict):
+        if segment_or_segments.get("type") == "seglist":
+            yield from _iter_segments(segment_or_segments.get("data") or [])
+        else:
+            yield segment_or_segments
+        return
+    if hasattr(segment_or_segments, "type"):
+        yield segment_or_segments
+
+
+def _segment_type(seg: Any) -> str:
+    if isinstance(seg, dict):
+        return str(seg.get("type") or "")
+    return str(getattr(seg, "type", "") or "")
+
+
+def _segment_data(seg: Any) -> Any:
+    if isinstance(seg, dict):
+        return seg.get("binary_data_base64") or seg.get("base64") or seg.get("data") or seg.get("content")
+    data = getattr(seg, "data", None)
+    if isinstance(data, dict):
+        return data.get("binary_data_base64") or data.get("base64") or data.get("data") or data.get("content")
+    return data
 
 
 def extract_images(segment_or_segments) -> List[str]:
     images: List[str] = []
     for seg in _iter_segments(segment_or_segments):
-        if getattr(seg, "type", "") in ("image", "emoji") and isinstance(seg.data, str):
-            image_base64 = _clean_base64(seg.data)
+        if _segment_type(seg) in ("image", "emoji"):
+            data = _segment_data(seg)
+            if not isinstance(data, str):
+                continue
+            image_base64 = _clean_base64(data)
             if image_base64:
                 images.append(image_base64)
     return images

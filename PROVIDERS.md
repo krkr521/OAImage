@@ -33,8 +33,8 @@
 
 图生图参考图来源可以是：
 
-- 最近聊天图片：Action 传 `mode = "image_to_image"` 和 `use_recent_image = true`。
-- 图片 URL：Action 或命令传 `image_source`，插件会先下载成 base64 再按 OpenAI 兼容格式发送。
+- 最近聊天图片：Tool 传 `mode = "image_to_image"` 和 `use_recent_image = true`。
+- 图片 URL：Tool 或命令传 `image_source`，插件会先下载成 base64 再按 OpenAI 兼容格式发送。
 - 本地图片路径：需要先在 `[behavior]` 中开启 `allow_local_image_source = true`。本地文件必须位于 `local_image_base_dir` 指定目录内。
 
 本地路径支持 `.png`、`.jpg`、`.jpeg`、`.webp`、`.gif`，并受 `local_image_base_dir` 和 `local_image_max_bytes` 限制。
@@ -101,9 +101,9 @@ image_to_image_mode = "multipart_edit"
 
 ## 给 Bot 看的套餐字段
 
-下面这些字段不会作为 API 请求参数发送给上游，而是暴露给 `generate_image` Action，帮助 Bot 判断该选哪个套餐，以及应该怎样写 prompt。
+下面这些字段不会作为 API 请求参数发送给上游，而是暴露给 `generate_image` Tool，帮助 Bot 判断该选哪个套餐，以及应该怎样写 prompt。
 
-- `display_name`：套餐显示名，Action 的 `profile` 参数可以填套餐 ID，也可以填这个显示名。
+- `display_name`：套餐显示名，Tool 的 `profile` 参数可以填套餐 ID，也可以填这个显示名。
 - `description`：套餐介绍，用来说明模型或端点的大致能力。
 - `supported_modes`：套餐支持的模式，例如 `text_to_image`、`image_to_image`。
 - `prompt_style`：提示词风格，例如 `danbooru_tags`、`natural_language`、`edit_instruction`。

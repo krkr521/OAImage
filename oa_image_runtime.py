@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 import traceback
 from dataclasses import dataclass
@@ -6,10 +7,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from oa_image_config import _get_nested
 
-from src.common.logger import get_logger
-from src.plugin_system.apis import message_api
-
-logger = get_logger("OAImage")
+logger = logging.getLogger("OAImage")
 
 
 @dataclass
@@ -103,28 +101,15 @@ async def cancel_command_tasks() -> None:
     COMMAND_TASKS.difference_update(tasks)
 
 
-def build_context_prompt(raw_prompt: str, stream_id: str, config: dict, mode: str) -> str:
-    if not _get_nested(config, "prompt.include_context", True):
+def build_context_prompt(
+    raw_prompt: str,
+    stream_id: str,
+    config: dict,
+    mode: str,
+    chat_context: str = "",
+) -> str:
+    if not _get_nested(config, "prompt.include_context", False):
         return raw_prompt
-    limit = int(_get_nested(config, "prompt.context_message_limit", 8))
-    hours = float(_get_nested(config, "prompt.context_hours", 2.0))
-    chat_context = ""
-    try:
-        messages = message_api.get_recent_messages(
-            chat_id=stream_id,
-            hours=hours,
-            limit=limit,
-            filter_mai=False,
-        )
-        chat_context = message_api.build_readable_messages_to_str(
-            messages,
-            replace_bot_name=True,
-            timestamp_mode="relative",
-            truncate=True,
-            show_actions=True,
-        )
-    except Exception as e:
-        logger.debug(f"构建生图上下文失败: {e}")
     template = _get_nested(
         config,
         "prompt.context_template",

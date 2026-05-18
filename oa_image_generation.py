@@ -1,10 +1,12 @@
+import logging
 import traceback
-from typing import Optional, Tuple
+from collections.abc import Awaitable, Callable
+from typing import Any, Optional, Tuple
 
 import aiohttp
 from oa_image_clients import JsonImageClient, OpenAIImageClient
 from oa_image_config import _apply_bot_appearance, _get_nested, _resolve_profile_config
-from oa_image_runtime import build_context_prompt, get_latest_cached_image, get_stream_lock, update_state
+from oa_image_runtime import get_latest_cached_image, get_stream_lock, update_state
 from oa_image_sources import (
     _clean_base64,
     _data_url_mime,
@@ -18,10 +20,11 @@ from oa_image_sources import (
     _looks_like_url,
 )
 
-from src.common.logger import get_logger
-from src.plugin_system.apis import send_api
+logger = logging.getLogger("OAImage")
 
-logger = get_logger("OAImage")
+SendImageCallback = Callable[..., Awaitable[Any]]
+SendTextCallback = Callable[..., Awaitable[Any]]
+ContextBuilderCallback = Callable[[str, str, dict, str], Awaitable[str]]
 
 
 async def run_generation(
@@ -35,6 +38,9 @@ async def run_generation(
     image_source: str = "",
     profile_name: str = "",
     use_bot_appearance: Optional[bool] = None,
+    send_image: SendImageCallback | None = None,
+    send_text: SendTextCallback | None = None,
+    context_builder: ContextBuilderCallback | None = None,
 ) -> Tuple[bool, str]:
     if not stream_id:
         return False, "missing stream_id"
@@ -96,8 +102,14 @@ async def run_generation(
         else:
             reference_image_base64 = _clean_base64(image_source)
             reference_image_mime = _data_url_mime(image_source) or "image/png"
+    if send_image is None:
+        return False, "send_image callback is required"
     prompt_source, appearance_injected = _apply_bot_appearance(raw_prompt.strip(), config, use_bot_appearance)
-    prompt = build_context_prompt(prompt_source, stream_id, config, resolved_mode)
+    prompt = (
+        await context_builder(prompt_source, stream_id, config, resolved_mode)
+        if context_builder is not None
+        else prompt_source
+    )
     client = JsonImageClient(config) if is_json_provider else OpenAIImageClient(config)
     if not getattr(client, "base_url", ""):
         return False, "api.base_url is empty"
@@ -126,10 +138,12 @@ async def run_generation(
                 image_base64 = await client.generate_text_to_image(prompt)
             if not image_base64:
                 return False, "endpoint returned no image"
-            sent = await send_api.image_to_stream(
-                image_base64=image_base64,
-                stream_id=stream_id,
-                storage_message=bool(_get_nested(config, "behavior.storage_message", True)),
+            sent = bool(
+                await send_image(
+                    image_base64,
+                    stream_id,
+                    storage_message=bool(_get_nested(config, "behavior.storage_message", True)),
+                )
             )
             result_text = f"image sent via {profile_id}" if profile_id else "image sent"
             update_state(
@@ -142,10 +156,6 @@ async def run_generation(
         update_state(stream_id, "image_failed", str(e)[:120])
         logger.error(f"生图失败: {e}")
         logger.error(traceback.format_exc())
-        if _get_nested(config, "behavior.send_error_messages", False):
-            await send_api.text_to_stream(
-                text=f"生图失败：{e}",
-                stream_id=stream_id,
-                storage_message=False,
-            )
+        if _get_nested(config, "behavior.send_error_messages", False) and send_text is not None:
+            await send_text(f"生图失败：{e}", stream_id, storage_message=False)
         return False, str(e)

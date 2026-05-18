@@ -1,11 +1,10 @@
 import copy
 import json
+import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.common.logger import get_logger
-
-logger = get_logger("OAImage")
+logger = logging.getLogger("OAImage")
 
 
 def _get_nested(config: Optional[dict], key: str, default=None):

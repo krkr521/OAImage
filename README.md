@@ -1,6 +1,6 @@
 # OAImage
 
-OAImage 是适配 MaiBot 0.12.2 的生图插件。插件通过“生图套餐”调用上游服务，主要面向 OpenAI 兼容图片端点，并允许额外传递参数。
+OAImage 是适配 MaiBot 1.0 / maibot-plugin-sdk 2.x 的生图插件。插件通过“生图套餐”调用上游服务，主要面向 OpenAI 兼容图片端点，并允许额外传递参数。
 
 ## 基础开关
 
@@ -12,7 +12,7 @@ enable_action = true
 
 `enabled` 控制整个插件是否启用。
 
-`enable_action` 控制是否注册 `generate_image` Action。关闭后，Bot/planner 不会看到也不会调用这个 Action；命令入口和事件缓存组件仍会注册，因此 `/生图`、`/画图`、`/图生图` 这类命令仍可使用。
+`enable_action` 控制是否注册 `generate_image` Tool。关闭后，Bot/LLM 不会看到也不会调用这个生图工具；命令入口和事件缓存组件仍会注册，因此 `/生图`、`/画图`、`/图生图` 这类命令仍可使用。
 
 ## 生图套餐
 
@@ -39,15 +39,15 @@ edits_path = "/images/edits"
 timeout_seconds = 120
 ```
 
-`default_profile` 是默认套餐。用户命令和 Action 都没有指定套餐时，会使用这个套餐。
+`default_profile` 是默认套餐。用户命令和 Tool 都没有指定套餐时，会使用这个套餐。
 
 provider 类型、上游字段、透传参数、本地参考图和多套餐示例集中维护在 [PROVIDERS.md](PROVIDERS.md)。
 
 ## 给 Bot 看的套餐元信息
 
-下面这些字段不会作为 API 请求参数发送给上游，而是暴露给 `generate_image` Action，帮助 bot 判断该选哪个套餐，以及应该怎样写 prompt。
+下面这些字段不会作为 API 请求参数发送给上游，而是暴露给 `generate_image` Tool，帮助 bot 判断该选哪个套餐，以及应该怎样写 prompt。
 
-`display_name` 是套餐显示名。Action 的 `profile` 参数可以填套餐 ID，也可以填这个显示名。
+`display_name` 是套餐显示名。Tool 的 `profile` 参数可以填套餐 ID，也可以填这个显示名。
 
 `description` 是套餐介绍，用来说明模型或端点的大致能力。
 
@@ -56,7 +56,7 @@ provider 类型、上游字段、透传参数、本地参考图和多套餐示�
 - `text_to_image`
 - `image_to_image`
 
-如果 Action 选择了套餐不支持的模式，插件会拒绝执行，避免用错请求格式。
+如果 Tool 选择了套餐不支持的模式，插件会拒绝执行，避免用错请求格式。
 
 `prompt_style` 是提示词风格，例如：
 
@@ -74,7 +74,7 @@ provider 类型、上游字段、透传参数、本地参考图和多套餐示�
 
 插件支持在生成 Bot 本体、头像、立绘、自画像或外形图时，把预先配置好的 Bot 外貌参数注入到最终上游请求 prompt。
 
-这个判断由 LLM/planner 负责。插件不会自动根据用户文本猜测“是不是在画 Bot”。当 planner 认为用户要画 Bot 本身时，需要在 `generate_image` Action 里传：
+这个判断由 LLM 负责。插件不会自动根据用户文本猜测“是不是在画 Bot”。当 LLM 认为用户要画 Bot 本身时，需要在 `generate_image` Tool 里传：
 
 ```json
 {
@@ -110,11 +110,11 @@ edit_prompt = "Keep the character consistent with the bot persona: short silver 
 
 如果 `use_bot_appearance` 没有传 `true`，插件不会注入这些外貌参数。
 
-## Action 选择套餐
+## Tool 选择套餐
 
-`generate_image` Action 支持 `profile` 参数。这个值可以填套餐 ID，也可以填套餐 `display_name`。
+`generate_image` Tool 支持 `profile` 参数。这个值可以填套餐 ID，也可以填套餐 `display_name`。
 
-插件注册 Action 时会把当前配置中的套餐 ID、显示名和介绍追加到 Action 说明里。这样 bot 在规划 Action 时可以根据说明选择合适套餐。
+插件注册 Tool 时会把当前配置中的套餐 ID、显示名和介绍追加到 Tool 说明里。这样 bot 在决定调用工具时可以根据说明选择合适套餐。
 
 例如：
 
