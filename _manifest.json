@@ -1,0 +1,72 @@
+{
+  "manifest_version": 1,
+  "name": "OAImage",
+  "version": "1.0.0",
+  "description": "通过可配置生图套餐调用 OpenAI 兼容图片端点，提供文字生图、图生图和 planner 可调用的生图 Action。",
+  "author": {
+    "name": "A-Dawn"
+  },
+  "license": "Apache-2.0",
+  "host_application": {
+    "min_version": "0.12.2",
+    "max_version": "0.12.99"
+  },
+  "keywords": [
+    "image",
+    "OAImage",
+    "draw",
+    "openai",
+    "profile",
+    "action"
+  ],
+  "categories": [
+    "AI",
+    "Media"
+  ],
+  "plugin_info": {
+    "is_built_in": false,
+    "plugin_type": "general",
+    "components": [
+      {
+        "type": "command",
+        "name": "draw_image",
+        "description": "识别生图命令并异步发送图片，不拦截普通回复"
+      },
+      {
+        "type": "action",
+        "name": "generate_image",
+        "description": "让 bot 主动选择生图套餐并调用 OpenAI 兼容图片端点生成并发送图片"
+      },
+      {
+        "type": "event_handler",
+        "name": "image_cache_on_message",
+        "description": "缓存最近收到的图片，供图生图 Action 使用"
+      },
+      {
+        "type": "event_handler",
+        "name": "image_state_on_plan",
+        "description": "记录 bot 正在规划"
+      },
+      {
+        "type": "event_handler",
+        "name": "image_state_after_llm",
+        "description": "记录 bot 刚完成 LLM 生成"
+      },
+      {
+        "type": "event_handler",
+        "name": "image_state_post_send",
+        "description": "记录 bot 正在发送消息"
+      },
+      {
+        "type": "event_handler",
+        "name": "image_state_after_send",
+        "description": "记录 bot 已发送消息"
+      },
+      {
+        "type": "event_handler",
+        "name": "image_cancel_command_tasks",
+        "description": "停止插件命令触发的后台生图任务"
+      }
+    ]
+  }
+}
