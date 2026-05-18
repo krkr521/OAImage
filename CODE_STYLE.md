@@ -58,6 +58,7 @@
 - 不记录完整请求头、Authorization、API key、图片 base64 或完整上游响应。
 - 本地参考图默认关闭，开启后只能读取 `local_image_base_dir` 内的图片。
 - 本地图片路径必须 `resolve()` 后校验仍在允许目录内部，防止 `..` 或绝对路径逃逸。
+- URL 参考图必须限制最大下载体积，并默认要求响应 `Content-Type` 为 `image/*`。
 - 非 OpenAI JSON 端点的 `image_source` 通常只接受公网 URL；OpenAI 兼容 provider 才允许 URL、本地目录图片或最近聊天图片。
 
 ## Prompt 与 Tool 语义

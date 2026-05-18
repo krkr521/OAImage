@@ -3,10 +3,22 @@ from typing import Any, Dict, List
 
 import aiohttp
 from oa_image_config import _form_value, _get_nested, _merge_passthrough_params, _parse_size
-from oa_image_sources import _clean_base64, _download_as_base64, _looks_like_url, _safe_image_filename
+from oa_image_sources import (
+    _clean_base64,
+    _download_as_base64,
+    _looks_like_url,
+    _read_limited_image_response,
+    _safe_image_filename,
+)
 
 
-async def _extract_image_from_json(session: aiohttp.ClientSession, payload: Any, timeout: int) -> str:
+async def _extract_image_from_json(
+    session: aiohttp.ClientSession,
+    payload: Any,
+    timeout: int,
+    max_bytes: int,
+    allow_non_image_content_type: bool,
+) -> str:
     candidates: List[Any] = []
     if isinstance(payload, dict):
         data = payload.get("data")
@@ -38,14 +50,20 @@ async def _extract_image_from_json(session: aiohttp.ClientSession, payload: Any,
                 value = item.get(key)
                 if isinstance(value, str) and value:
                     if _looks_like_url(value):
-                        return await _download_as_base64(session, value, timeout)
+                        return await _download_as_base64(
+                            session,
+                            value,
+                            timeout,
+                            max_bytes,
+                            allow_non_image_content_type,
+                        )
                     return _clean_base64(value)
             url = item.get("url")
             if isinstance(url, str) and url:
-                return await _download_as_base64(session, url, timeout)
+                return await _download_as_base64(session, url, timeout, max_bytes, allow_non_image_content_type)
         elif isinstance(item, str) and item:
             if _looks_like_url(item):
-                return await _download_as_base64(session, item, timeout)
+                return await _download_as_base64(session, item, timeout, max_bytes, allow_non_image_content_type)
             return _clean_base64(item)
     return ""
 
@@ -58,6 +76,16 @@ class OpenAIImageClient:
         self.model = str(_get_nested(config, "api.model", "gpt-image-1"))
         self.size = str(_get_nested(config, "generation.size", "1024x1024"))
         self.timeout = int(_get_nested(config, "api.timeout_seconds", 120))
+        self.url_image_max_bytes = int(
+            _get_nested(
+                config,
+                "behavior.url_image_max_bytes",
+                _get_nested(config, "behavior.local_image_max_bytes", 10 * 1024 * 1024),
+            )
+        )
+        self.allow_non_image_url_content_type = bool(
+            _get_nested(config, "behavior.allow_non_image_url_content_type", False)
+        )
 
     def _url(self, path: str) -> str:
         if path.startswith("http://") or path.startswith("https://"):
@@ -116,10 +144,21 @@ class OpenAIImageClient:
         async with aiohttp.ClientSession(headers=self._headers()) as session:
             async with session.post(url, json=payload, timeout=self.timeout) as response:
                 if response.headers.get("content-type", "").startswith("image/"):
-                    return base64.b64encode(await response.read()).decode("ascii")
+                    image_base64, _ = await _read_limited_image_response(
+                        response,
+                        self.url_image_max_bytes,
+                        self.allow_non_image_url_content_type,
+                    )
+                    return image_base64
                 response.raise_for_status()
                 data = await response.json(content_type=None)
-                return await _extract_image_from_json(session, data, self.timeout)
+                return await _extract_image_from_json(
+                    session,
+                    data,
+                    self.timeout,
+                    self.url_image_max_bytes,
+                    self.allow_non_image_url_content_type,
+                )
 
     async def _post_multipart_edit(
         self,
@@ -164,10 +203,21 @@ class OpenAIImageClient:
         async with aiohttp.ClientSession(headers=self._headers()) as session:
             async with session.post(self._url(path), data=form, timeout=self.timeout) as response:
                 if response.headers.get("content-type", "").startswith("image/"):
-                    return base64.b64encode(await response.read()).decode("ascii")
+                    image_base64, _ = await _read_limited_image_response(
+                        response,
+                        self.url_image_max_bytes,
+                        self.allow_non_image_url_content_type,
+                    )
+                    return image_base64
                 response.raise_for_status()
                 data = await response.json(content_type=None)
-                return await _extract_image_from_json(session, data, self.timeout)
+                return await _extract_image_from_json(
+                    session,
+                    data,
+                    self.timeout,
+                    self.url_image_max_bytes,
+                    self.allow_non_image_url_content_type,
+                )
 
 
 class JsonImageClient:
@@ -177,6 +227,16 @@ class JsonImageClient:
         self.api_key = str(_get_nested(config, "api.api_key", ""))
         self.path = str(_get_nested(config, "api.generations_path", "/api/v1/generate_image"))
         self.timeout = int(_get_nested(config, "api.timeout_seconds", 180))
+        self.url_image_max_bytes = int(
+            _get_nested(
+                config,
+                "behavior.url_image_max_bytes",
+                _get_nested(config, "behavior.local_image_max_bytes", 10 * 1024 * 1024),
+            )
+        )
+        self.allow_non_image_url_content_type = bool(
+            _get_nested(config, "behavior.allow_non_image_url_content_type", False)
+        )
 
     def _url(self) -> str:
         if self.path.startswith("http://") or self.path.startswith("https://"):
@@ -221,7 +281,12 @@ class JsonImageClient:
         async with aiohttp.ClientSession(headers=self._headers()) as session:
             async with session.post(self._url(), json=payload, timeout=self.timeout) as response:
                 if response.headers.get("content-type", "").startswith("image/"):
-                    return base64.b64encode(await response.read()).decode("ascii")
+                    image_base64, _ = await _read_limited_image_response(
+                        response,
+                        self.url_image_max_bytes,
+                        self.allow_non_image_url_content_type,
+                    )
+                    return image_base64
                 text = await response.text()
                 if response.status >= 400:
                     raise RuntimeError(f"json_api HTTP {response.status}: {text[:300]}")
@@ -229,4 +294,10 @@ class JsonImageClient:
                     data = await response.json(content_type=None)
                 except Exception:
                     data = text
-                return await _extract_image_from_json(session, data, self.timeout)
+                return await _extract_image_from_json(
+                    session,
+                    data,
+                    self.timeout,
+                    self.url_image_max_bytes,
+                    self.allow_non_image_url_content_type,
+                )

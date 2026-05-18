@@ -25,11 +25,11 @@ default_profile = "openai_default"
 [profiles.items.openai_default]
 display_name = "OpenAI 兼容默认套餐"
 description = "适合通用文生图，也可按上游能力配置图生图。"
-supported_modes = ["text_to_image"]
+supported_modes = ["text_to_image", "image_to_image"]
 prompt_style = "natural_language"
-use_cases = ["通用配图", "头像", "海报主视觉"]
+use_cases = ["通用配图", "头像", "海报主视觉", "图片编辑"]
 requires_image_source = false
-action_hint = "prompt 使用自然语言描述画面，写清主体、场景、构图、光照、风格和用途。"
+action_hint = "prompt 使用自然语言描述画面，写清主体、场景、构图、光照、风格和用途；图生图时写清需要保留与修改的内容。"
 provider = "openai"
 base_url = "https://api.example.com/v1"
 api_key = "sk-..."

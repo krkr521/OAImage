@@ -45,6 +45,10 @@ command_action_dedupe_seconds = 90
 allow_local_image_source = false
 local_image_base_dir = "local_images"
 local_image_max_bytes = 10485760
+url_image_max_bytes = 10485760
+allow_non_image_url_content_type = false
+runtime_state_ttl_seconds = 86400
+max_runtime_streams = 1024
 storage_message = true
 send_error_messages = false
 

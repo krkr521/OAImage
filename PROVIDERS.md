@@ -48,11 +48,11 @@ default_profile = "openai_default"
 [profiles.items.openai_default]
 display_name = "OpenAI 兼容默认套餐"
 description = "适合通用文生图，也可按上游能力配置图生图。"
-supported_modes = ["text_to_image"]
+supported_modes = ["text_to_image", "image_to_image"]
 prompt_style = "natural_language"
-use_cases = ["通用配图", "头像", "海报主视觉"]
+use_cases = ["通用配图", "头像", "海报主视觉", "图片编辑"]
 requires_image_source = false
-action_hint = "prompt 使用自然语言描述画面，写清主体、场景、构图、光照、风格和用途。"
+action_hint = "prompt 使用自然语言描述画面，写清主体、场景、构图、光照、风格和用途；图生图时写清需要保留与修改的内容。"
 provider = "openai"
 base_url = "https://api.example.com/v1"
 api_key = "sk-..."
@@ -155,9 +155,13 @@ OpenAI 兼容端点不需要公网 URL。它可以直接使用最近聊天图片
 allow_local_image_source = true
 local_image_base_dir = "local_images"
 local_image_max_bytes = 10485760
+url_image_max_bytes = 10485760
+allow_non_image_url_content_type = false
 ```
 
 为了避免群聊用户诱导 Bot 读取本机文件，本地路径默认关闭。开启后，本地 `image_source` 仍必须位于 `local_image_base_dir` 内。
+
+URL 参考图会校验响应类型和大小。默认只接受 `Content-Type` 为 `image/*` 的响应，并通过 `url_image_max_bytes` 限制最大下载体积。如果上游图片服务没有正确返回图片类型，可把 `allow_non_image_url_content_type` 改为 `true`，但不建议在开放群聊中这样做。
 
 `local_image_base_dir` 是允许读取的参考图目录。相对路径会按插件目录解析，因此默认值 `local_images` 实际对应：
 

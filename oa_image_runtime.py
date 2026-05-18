@@ -22,10 +22,77 @@ STREAM_STATES: Dict[str, Dict[str, Any]] = {}
 STREAM_LOCKS: Dict[str, asyncio.Lock] = {}
 STREAM_COMMAND_JOBS: Dict[str, Dict[str, Any]] = {}
 COMMAND_TASKS: Set[asyncio.Task] = set()
+DEFAULT_RUNTIME_STATE_TTL_SECONDS = 24 * 3600
+DEFAULT_MAX_RUNTIME_STREAMS = 1024
+
+
+def _latest_image_time(stream_id: str) -> float:
+    bucket = STREAM_IMAGES.get(stream_id) or []
+    return max((item.timestamp for item in bucket), default=0.0)
+
+
+def _stream_last_seen(stream_id: str) -> float:
+    return max(
+        _latest_image_time(stream_id),
+        float((STREAM_STATES.get(stream_id) or {}).get("time", 0.0) or 0.0),
+        float((STREAM_COMMAND_JOBS.get(stream_id) or {}).get("time", 0.0) or 0.0),
+    )
+
+
+def _drop_stream_state(stream_id: str) -> None:
+    STREAM_IMAGES.pop(stream_id, None)
+    STREAM_STATES.pop(stream_id, None)
+    STREAM_COMMAND_JOBS.pop(stream_id, None)
+    lock = STREAM_LOCKS.get(stream_id)
+    if lock is not None and not lock.locked():
+        STREAM_LOCKS.pop(stream_id, None)
+
+
+def cleanup_runtime_state(
+    max_age_seconds: int = DEFAULT_RUNTIME_STATE_TTL_SECONDS,
+    max_streams: int = DEFAULT_MAX_RUNTIME_STREAMS,
+) -> None:
+    """清理长期未使用的运行时状态，避免 stream 维度字典无限增长。"""
+
+    stream_ids = set(STREAM_IMAGES) | set(STREAM_STATES) | set(STREAM_COMMAND_JOBS) | set(STREAM_LOCKS)
+    if not stream_ids:
+        return
+    if max_streams <= 0:
+        for stream_id in list(stream_ids):
+            _drop_stream_state(stream_id)
+        return
+    now = time.time()
+    if max_age_seconds > 0:
+        cutoff = now - max_age_seconds
+        for stream_id in list(stream_ids):
+            last_seen = _stream_last_seen(stream_id)
+            lock = STREAM_LOCKS.get(stream_id)
+            if (not last_seen or last_seen < cutoff) and (lock is None or not lock.locked()):
+                _drop_stream_state(stream_id)
+    stream_ids = set(STREAM_IMAGES) | set(STREAM_STATES) | set(STREAM_COMMAND_JOBS) | set(STREAM_LOCKS)
+    if len(stream_ids) <= max_streams:
+        return
+    oldest_streams = sorted(stream_ids, key=_stream_last_seen)[: len(stream_ids) - max_streams]
+    for stream_id in oldest_streams:
+        lock = STREAM_LOCKS.get(stream_id)
+        if lock is None or not lock.locked():
+            _drop_stream_state(stream_id)
+
+
+def cleanup_runtime_state_from_config(config: dict) -> None:
+    cleanup_runtime_state(
+        max_age_seconds=int(_get_nested(config, "behavior.runtime_state_ttl_seconds", DEFAULT_RUNTIME_STATE_TTL_SECONDS)),
+        max_streams=int(_get_nested(config, "behavior.max_runtime_streams", DEFAULT_MAX_RUNTIME_STREAMS)),
+    )
 
 
 def cache_images(stream_id: str, images: List[str], max_items: int = 8, source: str = "message") -> None:
-    if not stream_id or not images:
+    if not stream_id:
+        return
+    if max_items <= 0:
+        STREAM_IMAGES.pop(stream_id, None)
+        return
+    if not images:
         return
     bucket = STREAM_IMAGES.setdefault(stream_id, [])
     now = time.time()
