@@ -1,4 +1,5 @@
 import base64
+import logging
 import mimetypes
 import re
 from pathlib import Path
@@ -7,6 +8,8 @@ from urllib.parse import unquote, urlparse
 
 import aiohttp
 from oa_image_config import _get_nested
+
+logger = logging.getLogger("OAImage")
 
 LOCAL_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 DEFAULT_URL_IMAGE_MAX_BYTES = 10 * 1024 * 1024
@@ -263,4 +266,28 @@ def _load_local_reference_image(config: dict, image_source: str) -> Tuple[str, s
     size = path.stat().st_size
     if size > max_bytes:
         raise ValueError(f"local image_source is too large: {size} bytes > {max_bytes} bytes")
+    return base64.b64encode(path.read_bytes()).decode("ascii"), _guess_image_mime(path.name), path.name
+
+
+def _load_bot_appearance_image(config: dict) -> Tuple[str, str, str]:
+    from oa_image_config import _bot_appearance_enabled
+
+    if not _bot_appearance_enabled(config):
+        return "", "", ""
+    ref_name = str(_get_nested(config, "bot_appearance.reference_image", "") or "").strip()
+    if not ref_name:
+        return "", "", ""
+    root = _local_image_root(config)
+    path = (root / ref_name).resolve()
+    if not _is_relative_to_path(path, root):
+        logger.warning(f"Bot 外形参考图不在允许目录内: {path}")
+        return "", "", ""
+    if not path.exists() or not path.is_file():
+        logger.warning(f"Bot 外形参考图不存在: {path}")
+        return "", "", ""
+    max_bytes = int(_get_nested(config, "behavior.local_image_max_bytes", 10 * 1024 * 1024))
+    size = path.stat().st_size
+    if size > max_bytes:
+        logger.warning(f"Bot 外形参考图过大: {size} bytes > {max_bytes} bytes")
+        return "", "", ""
     return base64.b64encode(path.read_bytes()).decode("ascii"), _guess_image_mime(path.name), path.name

@@ -20,6 +20,7 @@ class CachedImage:
 STREAM_IMAGES: Dict[str, List[CachedImage]] = {}
 STREAM_STATES: Dict[str, Dict[str, Any]] = {}
 STREAM_LOCKS: Dict[str, asyncio.Lock] = {}
+PROVIDER_SEMAPHORES: Dict[str, asyncio.Semaphore] = {}
 STREAM_COMMAND_JOBS: Dict[str, Dict[str, Any]] = {}
 COMMAND_TASKS: Set[asyncio.Task] = set()
 DEFAULT_RUNTIME_STATE_TTL_SECONDS = 24 * 3600
@@ -116,11 +117,29 @@ def update_state(stream_id: Optional[str], state: str, detail: str = "") -> None
     STREAM_STATES[stream_id] = {"state": state, "detail": detail, "time": time.time()}
 
 
+def merge_state_detail(stream_id: Optional[str], **values: Any) -> None:
+    if not stream_id:
+        return
+    current = STREAM_STATES.setdefault(stream_id, {"state": "unknown", "detail": "", "time": time.time()})
+    detail = current.get("detail")
+    detail_map = dict(detail) if isinstance(detail, dict) else {"summary": str(detail or "")}
+    detail_map.update({key: value for key, value in values.items() if value is not None})
+    current["detail"] = detail_map
+    current["time"] = time.time()
+
+
 def get_state_text(stream_id: str) -> str:
     state = STREAM_STATES.get(stream_id)
     if not state:
         return "unknown"
     detail = state.get("detail") or ""
+    if isinstance(detail, dict):
+        parts = []
+        for key in ("summary", "prompt", "mode", "delivery", "sent", "description"):
+            value = str(detail.get(key) or "").strip()
+            if value:
+                parts.append(f"{key}={value}")
+        return f"{state.get('state', 'unknown')}: " + "; ".join(parts)
     return f"{state.get('state', 'unknown')}: {detail}".strip()
 
 
@@ -130,16 +149,34 @@ def get_stream_lock(stream_id: str) -> asyncio.Lock:
     return STREAM_LOCKS[stream_id]
 
 
-def mark_command_job(stream_id: str, prompt: str) -> None:
+def get_provider_semaphore(provider: str, limit: int) -> asyncio.Semaphore:
+    """同一上游在当前插件生命周期内共用并发限额。"""
+    if provider not in PROVIDER_SEMAPHORES:
+        PROVIDER_SEMAPHORES[provider] = asyncio.Semaphore(limit)
+    return PROVIDER_SEMAPHORES[provider]
+
+
+def mark_command_job(stream_id: str, prompt: str, *, job_id: str = "") -> None:
     if stream_id:
-        STREAM_COMMAND_JOBS[stream_id] = {"prompt": prompt, "time": time.time()}
+        STREAM_COMMAND_JOBS[stream_id] = {"prompt": prompt, "time": time.time(), "job_id": job_id, "status": "queued"}
 
 
 def has_recent_command_job(stream_id: str, seconds: int) -> bool:
     job = STREAM_COMMAND_JOBS.get(stream_id)
     if not job:
         return False
+    if job.get("status") in {"failed", "cancelled"}:
+        return False
+    if job.get("status") in {"queued", "running"}:
+        return True
     return time.time() - float(job.get("time", 0)) <= seconds
+
+
+def finish_command_job(stream_id: str, job_id: str, status: str) -> None:
+    """只更新同一任务，旧任务失败不能解除新任务的去重锁。"""
+    job = STREAM_COMMAND_JOBS.get(stream_id)
+    if job is not None and job.get("job_id") == job_id:
+        job["status"] = status
 
 
 def track_command_task(task: asyncio.Task, stream_id: str) -> None:

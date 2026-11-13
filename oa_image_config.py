@@ -57,6 +57,17 @@ def _merge_passthrough_params(config: dict, payload: Dict[str, Any], mode: str) 
     return merged
 
 
+def _prompt_model_route(config: dict) -> Dict[str, str]:
+    """planner 跟随宿主任务模型；具体名称保持显式直选，不自行读取或复制模型列表。"""
+    model = _get_nested(config, "prompt.rewrite_model", "planner")
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError("未配置生图提示词整理模型")
+    model = model.strip()
+    if model.casefold() == "planner":
+        return {"task_name": "planner"}
+    return {"task_name": "utils", "model_name": model}
+
+
 def _form_value(value: Any) -> str:
     if isinstance(value, bool):
         return str(value).lower()
@@ -142,6 +153,8 @@ def _profile_generation_summary(profile: Dict[str, Any]) -> str:
 
 def _prompt_style_guidance(prompt_style: str) -> str:
     style = prompt_style.strip().lower()
+    if style == "novelai_v5":
+        return "使用 V5 英文词组、标签和简短关系句；插件通过 novelai-assistant 与 DeepSeek 整理为主提示词和独立角色栏。"
     if style == "danbooru_tags":
         return (
             "使用 Danbooru 标签格式：英文小写 tag，用逗号分隔；多词概念使用下划线，"
@@ -176,6 +189,18 @@ def _bot_appearance_prompt(config: dict, prompt_style: str) -> str:
 def _bot_appearance_text_for_action(config: Optional[dict]) -> str:
     if not _bot_appearance_enabled(config):
         return ""
+    has_ref = bool(_get_nested(config, "bot_appearance.reference_image", ""))
+    if has_ref:
+        return (
+            "Bot appearance reference image is enabled. "
+            "When the user asks to draw the bot itself, avatar, portrait, standee, self-image, or character image, "
+            "call generate_image with use_bot_appearance=true. "
+            "Important: when use_bot_appearance=true, preserve the character identity from the reference image, "
+            "especially face, hair color, core hairstyle silhouette, eye color, body silhouette, age impression, and "
+            "personality. Clothing, accessories, hairstyle details, props, and palette accents may change naturally "
+            "to fit the requested scene, season, activity, mood, and composition. Do not force the exact original "
+            "outfit or ornaments unless the user asks for them."
+        )
     aliases = _as_text_list(_get_nested(config, "bot_appearance.aliases", []))
     trigger_phrases = _as_text_list(_get_nested(config, "bot_appearance.trigger_phrases", []))
     pieces = ["Bot 外形人设注入已启用"]
@@ -210,8 +235,8 @@ def _join_text_prompt(appearance_prompt: str, raw_prompt: str, mode: str) -> str
     if not appearance:
         return prompt
     if mode == "append":
-        return f"{prompt}\nBot appearance/persona: {appearance}"
-    return f"Bot appearance/persona: {appearance}\n{prompt}"
+        return f"{prompt}\nBot appearance reference rule: {appearance}"
+    return f"Bot appearance reference rule: {appearance}\n{prompt}"
 
 
 def _apply_bot_appearance(
@@ -334,6 +359,8 @@ def _resolve_profile_config(config: dict, profile_hint: str = "") -> Tuple[dict,
             effective["passthrough"][mode_key] = current
     if isinstance(profile.get("prompt"), dict):
         effective["prompt"] = _merge_dict(dict(effective.get("prompt") or {}), profile["prompt"])
+    if isinstance(profile.get("behavior"), dict):
+        effective["behavior"] = _merge_dict(dict(effective.get("behavior") or {}), profile["behavior"])
     effective["profile_meta"] = {
         "id": profile_id,
         "display_name": _profile_label(profile_id, profile),

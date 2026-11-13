@@ -1,0 +1,41 @@
+{
+  "guidance_version": "local-imagegen-20261110.1",
+  "primary": "installed Codex imagegen prompting rules",
+  "sources": [
+    {
+      "role": "primary",
+      "path": "C:\\Users\\USERNAME\\.codex\\skills\\.system\\imagegen\\SKILL.md",
+      "sha256": "706d4d96e1d5c9e6023fe3ccabba1bb34b364024d344fd25b8515ec7d28fe3c4"
+    },
+    {
+      "role": "primary",
+      "path": "C:\\Users\\USERNAME\\.codex\\skills\\.system\\imagegen\\references\\prompting.md",
+      "sha256": "d957a45cb24fe2cf1a85858674fc533f15a5f4621355f559a13a93168999c2dd"
+    },
+    {
+      "role": "primary",
+      "path": "C:\\Users\\USERNAME\\.codex\\skills\\.system\\imagegen\\references\\sample-prompts.md",
+      "sha256": "76cc8a2988efb6e844a99ff9908b2b11cc07467510fc909002abcc0ee3f0701b"
+    },
+    {
+      "role": "secondary",
+      "url": "https://raw.githubusercontent.com/gnipbao/openai-image-prompt-writer/4edd0ab61a19f86d25b71377f10fdaaa1989cf21/SKILL.md",
+      "sha256": "ee9e83f5e0c333a159cc0d61319239d9e8245f47385a0fa2779537406cced764",
+      "commit": "4edd0ab61a19f86d25b71377f10fdaaa1989cf21"
+    },
+    {
+      "role": "secondary",
+      "url": "https://raw.githubusercontent.com/gnipbao/openai-image-prompt-writer/4edd0ab61a19f86d25b71377f10fdaaa1989cf21/references/prompt-patterns.md",
+      "sha256": "271ed7b44e78ce4cfcdaf7077cb6fb8ec4a0492acdc4ae448c4f61c850bccdc9",
+      "commit": "4edd0ab61a19f86d25b71377f10fdaaa1989cf21"
+    },
+    {
+      "role": "protocol",
+      "url": "https://developers.openai.com/api/docs/guides/image-generation#generate-animated-gif-output",
+      "verified_on": "2026-11-10",
+      "scope": "GIF generation and still-reference edits, timing, frame limits, incompatible request fields"
+    }
+  ],
+  "adaptation": "Only prompt-authoring principles are adapted; execution, API-key setup, CLI instructions and third-party code are not embedded or executed.",
+  "model_settings_source": "https://developers.openai.com/api/docs/guides/image-prompting"
+}
